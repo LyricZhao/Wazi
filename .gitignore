@@ -5,3 +5,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# RSA keys
+private_key
+# Allow accesses for public keys
+# public_key
