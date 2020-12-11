@@ -7,4 +7,10 @@ if __name__ == '__main__':
     encoded = rsa.encode(b"test information 12345678 +-*/")
     decoded = rsa.decode(encoded)
     print(decoded)
-    print(timeit.timeit(lambda: rsa.decode(encoded), number=100))  # 0.03s per decoding
+    print(timeit.timeit(lambda: rsa.decode(encoded), number=100))  # 0.04s per decode
+
+    aes = cipher.AESCipher()
+    encoded = aes.encode(b"test information 12345678 +-*/")
+    decoded = aes.decode(encoded)
+    print(decoded)
+    print(timeit.timeit(lambda: aes.decode(encoded), number=100))  # 0.000003s per decoding
