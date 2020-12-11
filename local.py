@@ -57,7 +57,7 @@ class WaziLocal:
     async def communicator(self, src: socket.socket, dst: socket.socket, cipher_func) -> None:
         while True:
             data = await self.loop.sock_recv(src, self.buffer_size)
-            if data is None:
+            if not data:
                 break
             data = cipher_func(data)
             await self.loop.sock_sendall(dst, data)
