@@ -6,7 +6,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# vscode
+# VS Code
 .vscode/
 
 # RSA keys
