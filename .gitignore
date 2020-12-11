@@ -8,3 +8,8 @@ __pycache__/
 
 # vscode
 .vscode/
+
+# RSA keys
+private_key
+# Allow accesses for public keys
+# public_key
