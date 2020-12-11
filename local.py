@@ -28,24 +28,25 @@ class WaziLocal:
             listener.setblocking(False)
 
             print("Local server starts successfully")
-            print("Listening for new connections ...")
+            # print("Listening for new connections ...")
             while True:
                 client, addr = await self.loop.sock_accept(listener)
                 self.loop.create_task(self.handle(client, addr))
 
     async def handle(self, client: socket.socket, addr) -> None:
-        print(" > Incoming connection: {}".format(addr))
+        # print(" > Incoming connection: {}".format(addr))
         remote = await self.new_remote()
 
         # Communicators
-        client2remote = self.loop.create_task(self.communicator(client, remote, EmptyCipher.encode))
-        remote2client = self.loop.create_task(self.communicator(remote, client, EmptyCipher.decode))
+        cipher = EmptyCipher()
+        client2remote = self.loop.create_task(self.communicator(client, remote, cipher.encode))
+        remote2client = self.loop.create_task(self.communicator(remote, client, cipher.decode))
 
         # Clean up
         def clean_up(_) -> None:
             client.close()
             remote.close()
-            print(" > Connections close: {}".format(addr))
+            # print(" > Connections close: {}".format(addr))
         asyncio.gather(client2remote, remote2client, loop=self.loop, return_exceptions=True).add_done_callback(clean_up)
 
     async def new_remote(self) -> socket.socket:
@@ -78,4 +79,3 @@ if __name__ == "__main__":
     # Run local server
     wazi_local = WaziLocal(asyncio.get_event_loop(), (options.sa, options.sp), (options.la, options.lp))
     wazi_local.run()
-

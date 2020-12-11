@@ -1,5 +1,6 @@
 import abc
 import random
+import time
 
 from Crypto.Cipher import AES
 
@@ -7,11 +8,11 @@ from Crypto.Cipher import AES
 class Cipher:
     @abc.abstractmethod
     def encode(self, data: bytes) -> bytes:
-        raise NotImplemented
+        raise NotImplementedError
 
     @abc.abstractmethod
     def decode(self, data: bytes) -> bytes:
-        raise NotImplemented
+        raise NotImplementedError
 
 
 class EmptyCipher(Cipher):
@@ -62,9 +63,12 @@ class RSACipher(Cipher):
 
 
 class AESCipher(Cipher):
-    def __init__(self):
-        self.key = random.randint(0, 65535).to_bytes(16, "little")
-        self.aes = AES.new(self.key)
+    def __init__(self, key):
+        self.aes = AES.new(key)
+
+    @staticmethod
+    def generate_key():
+        return random.randint(0, 65535).to_bytes(16, "little")
 
     @staticmethod
     def pack(data: bytes) -> bytes:
@@ -85,3 +89,27 @@ class AESCipher(Cipher):
     def decode(self, data: bytes) -> bytes:
         data = self.aes.decrypt(data)
         return AESCipher.unpack(data)
+
+
+class Hash:
+    def __init__(self):
+        self.last_query = ""
+        self.last_time = 0
+        self.last_result = (b"", b"")
+
+    @staticmethod
+    def hash(query: bytes, seed: int) -> bytes:
+        value = 0
+        mod = 2 ** 32
+        for byte in query:
+            value = ((value ^ seed) * 131 + int(byte)) % mod
+        return value.to_bytes(4, "little")
+
+    def hash_tuple(self, query: bytes):
+        current_time = int(time.time()) // 20
+        if query == self.last_query and current_time == self.last_time:
+            return self.last_result
+        self.last_query = query
+        self.last_time = current_time
+        self.last_result = (Hash.hash(query, current_time - 1), Hash.hash(query, current_time))
+        return self.last_result
