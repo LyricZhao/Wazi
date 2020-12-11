@@ -1,5 +1,6 @@
 import abc
 import random
+import requests
 import time
 
 from Crypto.Cipher import AES
@@ -24,13 +25,25 @@ class EmptyCipher(Cipher):
 
 
 class RSACipher(Cipher):
-    def __init__(self, public_key_path, private_key_path):
-        with open(public_key_path) as file:
-            self.n = int(file.readline())
-            self.e = int(file.readline())
-        with open(private_key_path) as file:
-            assert self.n == int(file.readline())
-            self.d = int(file.readline())
+    def __init__(self, public_key_addr="", private_key_addr=""):
+        self.n = None
+        self.e = None
+        self.d = None
+
+        if public_key_addr:
+            if public_key_addr.startswith("https"):
+                text = requests.get(public_key_addr).text
+                self.n, self.e = text.split()
+                self.n, self.e = int(self.n), int(self.e)
+            else:
+                with open(public_key_addr) as file:
+                    self.n = int(file.readline())
+                    self.e = int(file.readline())
+        if private_key_addr:
+            assert not private_key_addr.startswith("http")
+            with open(private_key_addr) as file:
+                self.n = int(file.readline())
+                self.d = int(file.readline())
 
     @staticmethod
     def fast_exp(a, b, n) -> int:
@@ -54,11 +67,11 @@ class RSACipher(Cipher):
         return coded.to_bytes(bytes_length, "little")
 
     def encode(self, data: bytes) -> bytes:
-        assert data
+        assert data and self.e and self.n
         return self.coder(data, self.e, self.n)
 
     def decode(self, data: bytes) -> bytes:
-        assert data
+        assert data and self.e and self.n
         return self.coder(data, self.d, self.n)
 
 
@@ -68,7 +81,7 @@ class AESCipher(Cipher):
 
     @staticmethod
     def generate_key():
-        return random.randint(0, 65535).to_bytes(16, "little")
+        return random.randint(0, 2 ** 128).to_bytes(16, "little")
 
     @staticmethod
     def pack(data: bytes) -> bytes:
