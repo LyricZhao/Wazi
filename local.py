@@ -32,7 +32,7 @@ class WaziLocal:
             remote.send(hash_value + rsa.encode(self.aes_key + key))
 
             # Verify response
-            response = self.aes.decode(remote.recv(1024))
+            response = self.aes.decode(remote.recv(self.buffer_size))
             if response == b"OK":
                 print("Successful authentication")
             else:
@@ -86,19 +86,38 @@ class WaziLocal:
     async def communicator(self, src: socket.socket, dst: socket.socket,
                            unpack_src_length: bool, pack_dst_length: bool, cipher_func) -> None:
         while True:
-            data = await self.loop.sock_recv(src, self.buffer_size)
+            data = b""
+            if unpack_src_length:
+                running = True
+                while len(data) < 32 and running:
+                    packet = await self.loop.sock_recv(src, 32 - len(data))
+                    if not packet:
+                        running = False
+                        break
+                    data = data + packet
+                if not running:
+                    break
+                assert len(data) == 32
+                length = int.from_bytes(cipher_func(data), "little")
+                data = b""
+                while len(data) < length and running:
+                    packet = await self.loop.sock_recv(src, min(self.buffer_size, length - len(data)))
+                    if not packet:
+                        running = False
+                        break
+                    data = data + packet
+                if not running:
+                    break
+            else:
+                data = await self.loop.sock_recv(src, self.buffer_size)
             if not data:
                 break
-            if unpack_src_length:
-                while len(data) < 2:
-                    data = data + await self.loop.sock_recv(src, 2 - len(data))
-                length = int.from_bytes(data[0:2], "little")
-                data = data[2:]
-                while len(data) < length:
-                    data = data + await self.loop.sock_recv(src, min(self.buffer_size, length - len(data)))
             data = cipher_func(data)
             if pack_dst_length:
-                data = int(len(data)).to_bytes(2, "little") + data
+                encoded_length = cipher_func(int(len(data)).to_bytes(16, "little"))
+                # `cipher_func` must encode 16 bytes into 32 bytes
+                assert len(encoded_length) == 32
+                data = encoded_length + data
             await self.loop.sock_sendall(dst, data)
 
 
