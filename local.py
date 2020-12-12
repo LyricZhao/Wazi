@@ -60,10 +60,9 @@ class WaziLocal:
             # print("Listening for new connections ...")
             while True:
                 client, addr = await self.loop.sock_accept(listener)
-                self.loop.create_task(self.handle(client, addr))
+                self.loop.create_task(self.handle(client))
 
-    async def handle(self, client: socket.socket, addr) -> None:
-        # print(" > Incoming connection: {}".format(addr))
+    async def handle(self, client: socket.socket) -> None:
         remote = await self.new_remote()
 
         # Communicators
@@ -123,16 +122,16 @@ class WaziLocal:
 
 if __name__ == "__main__":
     # Parse args
-    parser = argparse.ArgumentParser(description="Wazi: A light proxy")
-    parser.add_argument("-sa", help="Server address", metavar="SERVER_ADDRESS", default="106.52.13.105")
+    parser = argparse.ArgumentParser(description="Wazi Local: A Light Proxy Local Server")
+    parser.add_argument("-sa", help="Server address", metavar="SERVER_ADDRESS", type=str, default="106.52.13.105")
     parser.add_argument("-sp", help="Server port", metavar="SERVER_PORT", type=int, default="8388")
-    parser.add_argument("-la", help="Local address, default: localhost", metavar="LOCAL_ADDRESS", default="localhost")
+    parser.add_argument("-la", help="Local address, default: localhost",
+                        metavar="LOCAL_ADDRESS", type=str, default="localhost")
     parser.add_argument("-lp", help="Local port, default: 1080", metavar="LOCAL_PORT", type=int, default=1080)
-    parser.add_argument("-u", help="Username, default: admin", metavar="USER", default="admin")
-    parser.add_argument("-p", help="Password, default: admin", metavar="PASSWORD", default="admin")
-    parser.add_argument("-k", help="Public key address (path or HTTPS address) for remote server, default from GitHub",
-                        metavar="PUBLIC_KEY_ADDRESS",
-                        default="https://gitee.com/LyricZhao/Wazi/raw/main/public_key")
+    parser.add_argument("-u", help="Username, default: admin", metavar="USER", type=str, default="admin")
+    parser.add_argument("-p", help="Password, default: admin", metavar="PASSWORD", type=str, default="admin")
+    parser.add_argument("-k", help="Public key address (path or HTTPS address) for remote server, default: public_key",
+                        metavar="PUBLIC_KEY_ADDRESS", type=str, default="public_key")
     options = parser.parse_args()
     print("Options: {}".format(options))
 

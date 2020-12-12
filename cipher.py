@@ -71,7 +71,7 @@ class RSACipher(Cipher):
         return self.coder(data, self.e, self.n)
 
     def decode(self, data: bytes) -> bytes:
-        assert data and self.e and self.n
+        assert data and self.d and self.n
         return self.coder(data, self.d, self.n)
 
 
