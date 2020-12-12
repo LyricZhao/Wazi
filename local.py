@@ -120,6 +120,7 @@ class WaziLocal:
                 data = encoded_length + data
             await self.loop.sock_sendall(dst, data)
 
+
 if __name__ == "__main__":
     # Parse args
     parser = argparse.ArgumentParser(description="Wazi: A light proxy")

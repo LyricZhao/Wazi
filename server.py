@@ -1,13 +1,14 @@
 import argparse
-import socket
 import asyncio
+import socket
 
-from cipher import RSACipher, EmptyCipher, AESCipher, Hash
+from cipher import RSACipher, AESCipher, Hash
+
 
 BUFFER_SIZE = 1024
 
 
-class Server():
+class Server:
     def __init__(self, loop, host, port, pub_key_path, pri_key_path, passwd_path):
         self.loop = loop
         self.host = host
@@ -53,7 +54,7 @@ class Server():
 
                 passwd = data[16:]
                 if passwd != self.passwd:
-                    print(src_ip, "wrong passward, close connection")
+                    print(src_ip, "Wrong password, close connection")
                     src_conn.close()
                     return
                 
@@ -73,11 +74,11 @@ class Server():
             print("Auth OK")
         else:
             if src_ip not in self.ip_key_pool:
-                print("Hash Wrong")
+                print("Hash wrong")
                 src_conn.close()
                 return
             else:
-                aes_cipher = self.ip_key_pool[src_ip] # NOTE get from pool
+                aes_cipher = self.ip_key_pool[src_ip]  # NOTE get from pool
 
                 # 1. Method Negotiation
                 data = self.unpack_decode(data, aes_cipher)
@@ -104,7 +105,8 @@ class Server():
                     return
 
                 dst_family = None
-                dst_ip = None
+                dst_socket = None
+                dst_addr = None
                 dst_port = data[-2:]
                 dst_port = int(dst_port.hex(), 16)
     
@@ -120,32 +122,32 @@ class Server():
                     # ipv6 address
                     dst_ip = socket.inet_ntop(socket.AF_INET6, data[4:4 + 16])
                     dst_addr = (dst_ip, dst_port, 0, 0)
-                    dstFamily = socket.AF_INET6
+                    dst_family = socket.AF_INET6
                 else:
                     src_conn.close()
                     return
 
                 if dst_family is not None:
+                    # noinspection PyBroadException
                     try:
                         dst_socket = socket.socket(
                             family=dst_family, type=socket.SOCK_STREAM)
                         dst_socket.setblocking(False)
                         await self.loop.sock_connect(dst_socket, dst_addr)
-                    except Exception as e:
-                        # print("Caught exception", e)
+                    except Exception:
                         if dst_socket is not None:
                             dst_socket.close()
                             dst_socket = None
                 else:
                     for info in await self.loop.getaddrinfo(dst_ip, dst_port):
-                        dst_family, socket_type, proto, canonname, dst_addr = info
+                        dst_family, socket_type, proto, _, dst_addr = info
+                        # noinspection PyBroadException
                         try:
                             dst_socket = socket.socket(family=dst_family, type=socket_type, proto=proto)
                             dst_socket.setblocking(False)
                             await self.loop.sock_connect(dst_socket, dst_addr)
                             break
-                        except Exception as e:
-                            # print("Caught exception", e)
+                        except Exception:
                             if dst_socket is not None:
                                 dst_socket.close()
                                 dst_socket = None
@@ -154,30 +156,34 @@ class Server():
                     return
 
                 # 4. End negotiation
-                end_data = self.pack_encode(bytearray((0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)), aes_cipher)
+                end_data = self.pack_encode(
+                    bytearray((0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)), aes_cipher)
                 await self.loop.sock_sendall(src_conn, end_data)
 
-                src_to_dst_task = self.loop.create_task(self.recv_and_send("src2dst", self.loop, src_conn, dst_socket, True, False, cipher_func=aes_cipher.decode))
-                dst_to_src_task = self.loop.create_task(self.recv_and_send("dst2src", self.loop, dst_socket, src_conn, False, True, cipher_func=aes_cipher.encode))
+                src_to_dst_task = self.loop.create_task(self.recv_and_send(self.loop, src_conn, dst_socket,
+                                                                           True, False, cipher_func=aes_cipher.decode))
+                dst_to_src_task = self.loop.create_task(self.recv_and_send(self.loop, dst_socket, src_conn,
+                                                                           False, True, cipher_func=aes_cipher.encode))
 
                 task = asyncio.gather(src_to_dst_task, dst_to_src_task, loop=self.loop, return_exceptions=True)
 
-                def clean_up(task):
-                    # print("clean up")
+                def clean_up(_):
                     dst_socket.close()
                     src_conn.close()
 
                 task.add_done_callback(clean_up)
-        
-    def unpack_decode(self, data, cipher):
+
+    @staticmethod
+    def unpack_decode(data, cipher):
         data = data[32:]
         return cipher.decode(data)
 
-    def pack_encode(self, data, cipher):
+    @staticmethod
+    def pack_encode(data, cipher):
         data = cipher.encode(data)
         return cipher.encode(int(len(data)).to_bytes(16, "little")) + data
 
-    async def recv_and_send(self, mode, loop, conn_from, conn_to, unpack_src_length, pack_dst_length, cipher_func):
+    async def recv_and_send(self, loop, conn_from, conn_to, unpack_src_length, pack_dst_length, cipher_func):
         while True:
             try:
                 data = b""  
@@ -217,6 +223,7 @@ class Server():
             except KeyboardInterrupt:
                 break
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8388)
@@ -235,12 +242,13 @@ def main():
 
     server = Server(loop, host, port, args.pub_key_path, args.pri_key_path, args.passwd_path)
 
-    task = loop.create_task(server.run_server())
+    loop.create_task(server.run_server())
 
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         print("Remote server shuts down")
+
 
 if __name__ == "__main__":
     main()
