@@ -61,7 +61,7 @@ class Server:
                     src_conn.close()
                     return
                 
-                print(" > Correct Password and set AES key for {}".format(src_ip))
+                print(" > Correct Password and exchange AES key with {}".format(src_ip))
                 hit = True
                 R = data[:16]
                 self.ip_aes_pool[src_ip] = AESCipher(R)
@@ -76,11 +76,14 @@ class Server:
                 src_conn.close()
                 return
             else:
-                aes = self.ip_aes_pool[src_ip]
-                data = self.unpack_decode(data, aes)
 
                 # 1. Method negotiation
-                if not data or data[0] != 0x05:
+                # noinspection PyBroadException
+                try:
+                    aes = self.ip_aes_pool[src_ip]
+                    data = self.unpack_decode(data, aes)
+                    assert data and data[0] == 0x05
+                except Exception:
                     src_conn.close()
                     return
 
