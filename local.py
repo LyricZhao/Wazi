@@ -90,17 +90,16 @@ class WaziLocal:
             if not data:
                 break
             if unpack_src_length:
-                while len(data) < 2:
-                    data = data + await self.loop.sock_recv(src, 2 - len(data))
-                length = int.from_bytes(data[0:2], "little")
-                data = data[2:]
+                while len(data) < 16:
+                    data = data + await self.loop.sock_recv(src, 16 - len(data))
+                length = int.from_bytes(cipher_func(data[0:16]), "little")
+                data = data[16:]
                 while len(data) < length:
                     data = data + await self.loop.sock_recv(src, min(self.buffer_size, length - len(data)))
             data = cipher_func(data)
             if pack_dst_length:
-                data = int(len(data)).to_bytes(2, "little") + data
+                data = cipher_func(int(len(data)).to_bytes(16, "little")) + data
             await self.loop.sock_sendall(dst, data)
-
 
 if __name__ == "__main__":
     # Parse args

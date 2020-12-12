@@ -26,7 +26,7 @@ class Server():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as src_socket:
             src_socket.setblocking(False)
             src_socket.bind((self.host, self.port))
-            src_socket.listen(5)
+            src_socket.listen(socket.SOMAXCONN)
 
             print("Listening at {}:{}".format(self.host, self.port))
             while True:
@@ -66,12 +66,12 @@ class Server():
 
                 R = data[:16]
                 print("R", R)
-                # self.ip_key_pool[src_ip] = AESCipher(R)
-                self.ip_key_pool[src_ip] = EmptyCipher()
+                self.ip_key_pool[src_ip] = AESCipher(R)
+                # self.ip_key_pool[src_ip] = EmptyCipher()
 
                 print("sent OK")
                 ok_data = b"OK"
-                ok_data = self.ip_key_pool[src_ip].encode(ok_data)
+                ok_data = AESCipher(R).encode(ok_data)
                 await self.loop.sock_sendall(src_conn, ok_data)
 
         if hit:
@@ -84,20 +84,24 @@ class Server():
             else:
                 aes_cipher = self.ip_key_pool[src_ip] # NOTE get from pool
     
+                data = data[32:]
                 data = aes_cipher.decode(data)
                 print("Receive Negotiation:", data)
     
                 if not data or data[0] != 0x05:
+                    print("Not socks 5")
                     src_conn.close()
                     return
     
                 # 2. Send Response, select a method. Choose 0x00 for no verification
                 response_data = bytearray((0x05, 0x00))
                 response_data = aes_cipher.encode(response_data)
+                response_data = aes_cipher.encode(int(len(response_data)).to_bytes(16, "little")) + response_data
                 await self.loop.sock_sendall(src_conn, response_data)
     
                 # 3. Request
                 data = await self.loop.sock_recv(src_conn, BUFFER_SIZE)
+                data = data[32:]
                 data = aes_cipher.decode(data)
                 print("Receive Request:", data)
     
@@ -167,10 +171,11 @@ class Server():
                 # 4. End negotiation
                 end_data = bytearray((0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00))
                 end_data = aes_cipher.encode(end_data)
+                end_data = aes_cipher.encode(int(len(end_data)).to_bytes(16, "little")) + end_data
                 await self.loop.sock_sendall(src_conn, end_data)
     
-                src_to_dst_task = self.loop.create_task(self.recv_and_send("src2dst", self.loop, src_conn, dst_socket, cipher_func=aes_cipher.decode))
-                dst_to_src_task = self.loop.create_task(self.recv_and_send("dst2src", self.loop, dst_socket, src_conn, cipher_func=aes_cipher.encode))
+                src_to_dst_task = self.loop.create_task(self.recv_and_send("src2dst", self.loop, src_conn, dst_socket, True, False, cipher_func=aes_cipher.decode))
+                dst_to_src_task = self.loop.create_task(self.recv_and_send("dst2src", self.loop, dst_socket, src_conn, False, True, cipher_func=aes_cipher.encode))
     
                 task = asyncio.gather(src_to_dst_task, dst_to_src_task, loop=self.loop, return_exceptions=True)
     
@@ -181,14 +186,27 @@ class Server():
     
                 task.add_done_callback(clean_up)
 
-    async def recv_and_send(self, mode, loop, conn_from, conn_to, cipher_func):
+    async def recv_and_send(self, mode, loop, conn_from, conn_to, unpack_src_length, pack_dst_length, cipher_func):
         while True:
-            data = await loop.sock_recv(conn_from, BUFFER_SIZE)
+            data = b""  
+            if unpack_src_length:
+                while len(data) < 32:
+                    data = data + await self.loop.sock_recv(conn_from, 32 - len(data))
+                assert len(data) == 32
+                length = int.from_bytes(cipher_func(data), "little")
+                data = b""
+                while len(data) < length:
+                    data = data + await self.loop.sock_recv(conn_from, min(BUFFER_SIZE, length - len(data)))
+            else:
+                data = await loop.sock_recv(conn_from, BUFFER_SIZE)
+            # print("data", data)
             if not data:
                 break
-            print("before encode", mode, data)
+            # print("before", mode, data)
             data = cipher_func(data)
-            print("end encode", mode, data)
+            if pack_dst_length:
+                data = cipher_func(int(len(data)).to_bytes(16, "little")) + data
+            # print("end", mode, data)
             await loop.sock_sendall(conn_to, data)
 
         print(mode, "close")
